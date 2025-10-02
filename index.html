@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Collatz 3x+1 — 3D Tree (3d-force-graph)</title>
+  <style>body{margin:0} #graph{width:100vw;height:100vh}</style>
+</head>
+<body>
+<div id="graph"></div>
+
+<!-- UMD bundle for 3d-force-graph (uses three.js internally) -->
+<script src="https://unpkg.com/3d-force-graph"></script>
+
+<script>
+  // Collatz next function
+  function collatzNext(n) {
+    return (n % 2 === 0) ? n / 2 : 3 * n + 1;
+  }
+
+  // Build graph nodes and links up to maxN (avoid too large or browser will lag)
+  const maxN = 2000; // tweak: 500..5000 depending on perf
+  const nodes = [];
+  const links = [];
+  const nodeIndex = new Map();
+
+  // create nodes
+  for (let i = 1; i <= maxN; i++) {
+    nodes.push({ id: i, size: (i % 2 === 0 ? 2 : 4) });
+    nodeIndex.set(i, true);
+  }
+
+  // create links n -> collatzNext(n) if target within range; otherwise skip or add target too
+  for (let i = 1; i <= maxN; i++) {
+    const t = collatzNext(i);
+    if (t <= maxN) {
+      links.push({ source: i, target: t });
+    } else {
+      // optional: add target node so graph shows where it goes
+      nodes.push({ id: t, size: 1 });
+      links.push({ source: i, target: t });
+      nodeIndex.set(t, true);
+    }
+  }
+
+  // instantiate 3d-force-graph
+  const Graph = ForceGraph3D()(document.getElementById('graph'))
+    .graphData({ nodes, links })
+    .nodeAutoColorBy('id')          // color by id (quick)
+    .nodeLabel(node => `n=${node.id}`)
+    .nodeRelSize(1.5)
+    .linkDirectionalParticles(0)    // set >0 to show moving particles along links
+    .showNavInfo(true);
+
+  // optional: make the layout more tree-like by biasing repulsion
+  Graph.d3Force('charge').strength(-30);   // adjust to spread nodes
+  Graph.d3Force('link').distance(6);
+
+  // helper: focus camera on a node on click
+  Graph.onNodeClick(node => {
+    const distance = 100;
+    const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
+    Graph.cameraPosition(
+      { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }, // new pos
+      { x: node.x, y: node.y, z: node.z }, // lookAt
+      1500  // ms transition
+    );
+  });
+
+  // performance note: for large N consider precomputing layout or sampling nodes
+</script>
+</body>
+</html>
