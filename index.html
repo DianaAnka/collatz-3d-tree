@@ -1,100 +1,109 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Collatz 3D Tree — Interactive</title>
+  <meta charset="UTF-8">
+  <title>Collatz Conjecture 3D Tree</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #111; }
-    #graph { width: 100vw; height: 100vh; }
+    body { margin: 0; overflow: hidden; background: radial-gradient(ellipse at center, #0a0a0f 0%, #000000 100%); }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 10px; left: 10px; color: #fff; font-family: sans-serif;
+      background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px;
+    }
   </style>
 </head>
 <body>
-<div id="graph"></div>
+<div id="info">Collatz Conjecture 3D 🌌</div>
 
-<!-- Libraries -->
-<script src="https://unpkg.com/3d-force-graph"></script>
-<script src="https://cdn.jsdelivr.net/npm/dat.gui@0.7.9/build/dat.gui.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chroma-js@2.4.2/chroma.min.js"></script>
 
 <script>
-  // -----------------------------
-  // Collatz function
-  function collatzNext(n) {
-    return (n % 2 === 0) ? n / 2 : 3 * n + 1;
+const scene = new THREE.Scene();
+
+// Camera
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(0, 20, 60);
+
+// Renderer
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+// Controls
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.7;
+
+// Lights
+scene.add(new THREE.HemisphereLight(0xffffff, 0x222222, 1.2));
+const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+dirLight.position.set(10, 20, 10);
+scene.add(dirLight);
+
+// Postprocessing (Bloom)
+const composer = new THREE.EffectComposer(renderer);
+composer.addPass(new THREE.RenderPass(scene, camera));
+const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.4, 0.85);
+composer.addPass(bloomPass);
+
+// Function to generate Collatz sequence
+function collatz(n) {
+  let seq = [n];
+  while (n !== 1) {
+    n = n % 2 === 0 ? n / 2 : 3 * n + 1;
+    seq.push(n);
+    if (seq.length > 200) break; // safety
   }
+  return seq;
+}
 
-  // -----------------------------
-  // Color palettes
-  const palettes = {
-    Rainbow: ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#46f0f0','#f032e6','#bcf60c','#fabebe'],
-    Pastel: ['#a8dadc','#457b9d','#f4a261','#e76f51','#e9c46a','#2a9d8f','#ffafcc','#cdb4db','#90e0ef','#ffb4a2'],
-    Neon: ['#ff1744','#d500f9','#2979ff','#00e676','#ffea00','#ff9100','#00e5ff','#76ff03','#f50057','#c6ff00']
-  };
+// Draw Collatz tree as tubes
+const maxN = 200;
+const colorScale = chroma.scale(["#ff0080", "#00ffff", "#ffcc00"]).mode("lch");
 
-  // -----------------------------
-  // GUI settings
-  const settings = {
-    maxN: 1000,
-    palette: 'Rainbow'
-  };
+for (let n = 2; n < maxN; n++) {
+  const seq = collatz(n);
+  const points = seq.map((val, i) => new THREE.Vector3(
+    Math.log(val) * Math.sin(i*0.3),
+    i * 0.3,
+    Math.log(val) * Math.cos(i*0.3)
+  ));
 
-  // -----------------------------
-  // Build graph data
-  function buildGraph(maxN) {
-    const nodes = [];
-    const links = [];
-
-    for (let i = 1; i <= maxN; i++) {
-      nodes.push({ id: i });
-    }
-    for (let i = 1; i <= maxN; i++) {
-      const t = collatzNext(i);
-      if (t <= maxN) {
-        links.push({ source: i, target: t });
-      }
-    }
-    return { nodes, links };
+  if (points.length > 1) {
+    const curve = new THREE.CatmullRomCurve3(points);
+    const geometry = new THREE.TubeGeometry(curve, 100, 0.05, 8, false);
+    const material = new THREE.MeshStandardMaterial({
+      color: colorScale(Math.log(n)/Math.log(maxN)).hex(),
+      metalness: 0.6,
+      roughness: 0.2
+    });
+    const tube = new THREE.Mesh(geometry, material);
+    scene.add(tube);
   }
+}
 
-  // -----------------------------
-  // Initialize graph
-  const Graph = ForceGraph3D()(document.getElementById('graph'))
-    .graphData(buildGraph(settings.maxN))
-    .nodeColor(node => palettes[settings.palette][node.id % palettes[settings.palette].length])
-    .nodeLabel(node => `n=${node.id}`)
-    .nodeRelSize(2)
-    .linkDirectionalParticles(1)
-    .linkDirectionalParticleSpeed(0.01)
-    .linkWidth(0.5)
-    .showNavInfo(false);
+// Animation loop
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  composer.render();
+}
+animate();
 
-  Graph.d3Force('charge').strength(-30);
-  Graph.d3Force('link').distance(6);
-
-  // -----------------------------
-  // Add dat.GUI controls
-  const gui = new dat.GUI();
-  gui.width = 300;
-
-  gui.add(settings, 'maxN', 100, 5000, 100).name('Max Number').onFinishChange(val => {
-    Graph.graphData(buildGraph(val));
-    Graph.nodeColor(node => palettes[settings.palette][node.id % palettes[settings.palette].length]);
-  });
-
-  gui.add(settings, 'palette', Object.keys(palettes)).name('Color Palette').onChange(val => {
-    Graph.nodeColor(node => palettes[val][node.id % palettes[val].length]);
-  });
-
-  // -----------------------------
-  // Node click zoom
-  Graph.onNodeClick(node => {
-    const distance = 200;
-    const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
-    Graph.cameraPosition(
-      { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-      { x: node.x, y: node.y, z: node.z },
-      1500
-    );
-  });
+// Resize
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
 </script>
 </body>
 </html>
