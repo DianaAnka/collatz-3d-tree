@@ -2,65 +2,90 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Collatz 3D Tree — Flashy</title>
+  <title>Collatz 3D Tree — Interactive</title>
   <style>
-    body { margin: 0; overflow: hidden; background-color: #111; }
+    body { margin: 0; overflow: hidden; background: #111; }
     #graph { width: 100vw; height: 100vh; }
   </style>
 </head>
 <body>
 <div id="graph"></div>
 
-<!-- 3D Force Graph library -->
+<!-- Libraries -->
 <script src="https://unpkg.com/3d-force-graph"></script>
+<script src="https://cdn.jsdelivr.net/npm/dat.gui@0.7.9/build/dat.gui.min.js"></script>
 
 <script>
-  // Configuration
-  const maxN = 2000; // number of nodes, adjust for performance
-  const nodes = [];
-  const links = [];
-  
-  // Flashy rainbow colors
-  const colors = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#46f0f0','#f032e6','#bcf60c','#fabebe'];
-
-  // Collatz next function
+  // -----------------------------
+  // Collatz function
   function collatzNext(n) {
     return (n % 2 === 0) ? n / 2 : 3 * n + 1;
   }
 
-  // Create nodes
-  for (let i = 1; i <= maxN; i++) {
-    nodes.push({ id: i });
-  }
+  // -----------------------------
+  // Color palettes
+  const palettes = {
+    Rainbow: ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#46f0f0','#f032e6','#bcf60c','#fabebe'],
+    Pastel: ['#a8dadc','#457b9d','#f4a261','#e76f51','#e9c46a','#2a9d8f','#ffafcc','#cdb4db','#90e0ef','#ffb4a2'],
+    Neon: ['#ff1744','#d500f9','#2979ff','#00e676','#ffea00','#ff9100','#00e5ff','#76ff03','#f50057','#c6ff00']
+  };
 
-  // Create links
-  for (let i = 1; i <= maxN; i++) {
-    const t = collatzNext(i);
-    if (t <= maxN) {
-      links.push({ source: i, target: t });
-    } else {
-      // optional: show where numbers go beyond maxN
-      nodes.push({ id: t });
-      links.push({ source: i, target: t });
+  // -----------------------------
+  // GUI settings
+  const settings = {
+    maxN: 1000,
+    palette: 'Rainbow'
+  };
+
+  // -----------------------------
+  // Build graph data
+  function buildGraph(maxN) {
+    const nodes = [];
+    const links = [];
+
+    for (let i = 1; i <= maxN; i++) {
+      nodes.push({ id: i });
     }
+    for (let i = 1; i <= maxN; i++) {
+      const t = collatzNext(i);
+      if (t <= maxN) {
+        links.push({ source: i, target: t });
+      }
+    }
+    return { nodes, links };
   }
 
-  // Initialize 3D Force Graph
+  // -----------------------------
+  // Initialize graph
   const Graph = ForceGraph3D()(document.getElementById('graph'))
-    .graphData({ nodes, links })
-    .nodeColor(node => colors[node.id % colors.length])  // flashy rainbow colors
+    .graphData(buildGraph(settings.maxN))
+    .nodeColor(node => palettes[settings.palette][node.id % palettes[settings.palette].length])
     .nodeLabel(node => `n=${node.id}`)
     .nodeRelSize(2)
-    .linkDirectionalParticles(1)          // particles along links
+    .linkDirectionalParticles(1)
     .linkDirectionalParticleSpeed(0.01)
     .linkWidth(0.5)
     .showNavInfo(false);
 
-  // Adjust forces to spread nodes nicely
   Graph.d3Force('charge').strength(-30);
   Graph.d3Force('link').distance(6);
 
-  // Optional: click a node to zoom
+  // -----------------------------
+  // Add dat.GUI controls
+  const gui = new dat.GUI();
+  gui.width = 300;
+
+  gui.add(settings, 'maxN', 100, 5000, 100).name('Max Number').onFinishChange(val => {
+    Graph.graphData(buildGraph(val));
+    Graph.nodeColor(node => palettes[settings.palette][node.id % palettes[settings.palette].length]);
+  });
+
+  gui.add(settings, 'palette', Object.keys(palettes)).name('Color Palette').onChange(val => {
+    Graph.nodeColor(node => palettes[val][node.id % palettes[val].length]);
+  });
+
+  // -----------------------------
+  // Node click zoom
   Graph.onNodeClick(node => {
     const distance = 200;
     const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
