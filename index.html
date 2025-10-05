@@ -15,12 +15,21 @@
 <body>
 <div id="info">Collatz Conjecture 3D 🌌</div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js/postprocessing/EffectComposer.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js/postprocessing/RenderPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<!-- Three.js -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<!-- Postprocessing scripts -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+
+<!-- Utilities -->
 <script src="https://cdn.jsdelivr.net/npm/chroma-js@2.4.2/chroma.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lil-gui@0.17"></script>
 
 <script>
 const scene = new THREE.Scene();
@@ -50,44 +59,68 @@ scene.add(dirLight);
 // Postprocessing (Bloom)
 const composer = new THREE.EffectComposer(renderer);
 composer.addPass(new THREE.RenderPass(scene, camera));
-const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.4, 0.85);
+const bloomPass = new THREE.UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  1.2, 0.4, 0.85
+);
 composer.addPass(bloomPass);
 
-// Function to generate Collatz sequence
+// GUI parameters
+const params = {
+  maxN: 200,
+  bloomStrength: 1.2,
+  autoRotateSpeed: 0.7,
+  rebuild: buildTree
+};
+
+// Collatz sequence generator
 function collatz(n) {
   let seq = [n];
   while (n !== 1) {
     n = n % 2 === 0 ? n / 2 : 3 * n + 1;
     seq.push(n);
-    if (seq.length > 200) break; // safety
+    if (seq.length > 200) break;
   }
   return seq;
 }
 
-// Draw Collatz tree as tubes
-const maxN = 200;
-const colorScale = chroma.scale(["#ff0080", "#00ffff", "#ffcc00"]).mode("lch");
+// Build Collatz tree as tubes
+function buildTree() {
+  // Remove old meshes
+  for (let i = scene.children.length - 1; i >= 0; i--) {
+    if (scene.children[i].isMesh) scene.remove(scene.children[i]);
+  }
 
-for (let n = 2; n < maxN; n++) {
-  const seq = collatz(n);
-  const points = seq.map((val, i) => new THREE.Vector3(
-    Math.log(val) * Math.sin(i*0.3),
-    i * 0.3,
-    Math.log(val) * Math.cos(i*0.3)
-  ));
+  const colorScale = chroma.scale(["#ff0080", "#00ffff", "#ffcc00"]).mode("lch");
 
-  if (points.length > 1) {
-    const curve = new THREE.CatmullRomCurve3(points);
-    const geometry = new THREE.TubeGeometry(curve, 100, 0.05, 8, false);
-    const material = new THREE.MeshStandardMaterial({
-      color: colorScale(Math.log(n)/Math.log(maxN)).hex(),
-      metalness: 0.6,
-      roughness: 0.2
-    });
-    const tube = new THREE.Mesh(geometry, material);
-    scene.add(tube);
+  for (let n = 2; n < params.maxN; n++) {
+    const seq = collatz(n);
+    const points = seq.map((val, i) => new THREE.Vector3(
+      Math.log(val) * Math.sin(i * 0.3),
+      i * 0.3,
+      Math.log(val) * Math.cos(i * 0.3)
+    ));
+
+    if (points.length > 1) {
+      const curve = new THREE.CatmullRomCurve3(points);
+      const geometry = new THREE.TubeGeometry(curve, 100, 0.05, 8, false);
+      const material = new THREE.MeshStandardMaterial({
+        color: colorScale(Math.log(n)/Math.log(params.maxN)).hex(),
+        metalness: 0.6,
+        roughness: 0.2
+      });
+      const tube = new THREE.Mesh(geometry, material);
+      scene.add(tube);
+    }
   }
 }
+buildTree();
+
+// GUI controls
+const gui = new lil.GUI();
+gui.add(params, 'maxN', 50, 500, 10).name("Max N").onChange(buildTree);
+gui.add(params, 'bloomStrength', 0, 3, 0.1).name("Bloom").onChange(v => bloomPass.strength = v);
+gui.add(params, 'autoRotateSpeed', 0, 5, 0.1).name("Rotate Speed").onChange(v => controls.autoRotateSpeed = v);
 
 // Animation loop
 function animate() {
@@ -97,7 +130,7 @@ function animate() {
 }
 animate();
 
-// Resize
+// Handle resize
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
